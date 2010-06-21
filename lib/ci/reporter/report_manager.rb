@@ -14,7 +14,9 @@ module CI #:nodoc:
       end
       
       def write_report(suite)
-        File.open("#{@basename}-#{suite.name.gsub(/[^a-zA-Z0-9]+/, '-')}.xml", "w") do |f|
+        filename = "#{@basename}-#{suite.name.gsub(/[^a-zA-Z0-9]+/, '-')}.xml"
+        filename = "#{filename}_#{Time.now}" if File.exist? filename
+        File.open(filename, "w") do |f|
           f << suite.to_xml
         end
       end

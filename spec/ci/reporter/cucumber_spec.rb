@@ -70,28 +70,14 @@ describe "The Cucumber reporter" do
       CI::Reporter::ReportManager.should_receive(:new)
       new_instance
     end
-
-    it "should record the feature name when a new feature is visited" do
-      cucumber = new_instance
-      cucumber.before_feature_name("Some feature name")
-      cucumber.instance_eval {|i| @current_feature_name}.should == "Some feature name"
-    end
-
-    it "should record only the first line of a feature name" do
-      cucumber = new_instance
-      cucumber.before_feature_name("Some feature name\nLonger description")
-      cucumber.instance_eval {|i| @current_feature_name}.should == "Some feature name"
-    end
-
-    describe "when visiting a new scenario" do
+    
+    describe "when visiting a new feature" do
       before(:each) do
         @cucumber = new_instance
-        @cucumber.before_feature_name("Demo feature")
+        @feature_name = "Demo Feature"
 
         @test_suite = mock("test_suite", :start => nil, :finish => nil)
         CI::Reporter::TestSuite.stub!(:new).and_return(@test_suite)
-
-        @feature_element = mock("feature_element", :accept => true)
 
         @report_manager.stub!(:write_report)
       end
@@ -100,91 +86,182 @@ describe "The Cucumber reporter" do
         # FIXME: @name is feature_element purely as a by-product of the
         # mocking framework implementation.  But then again, using
         # +instance_variable_get+ in the first place is a bit icky.
-        CI::Reporter::TestSuite.should_receive(:new).with("Demo feature feature_element")
-        @cucumber.before_feature_element(@feature_element)
+        CI::Reporter::TestSuite.should_receive(:new).with(@feature_name)
+        @cucumber.before_feature_name(@feature_name)
       end
 
       it "should indicate that the test suite has started" do
         @test_suite.should_receive(:start)
-        @cucumber.before_feature_element(@feature_element)
+        @cucumber.before_feature_name(@feature_name)
       end
 
       it "should indicate that the test suite has finished" do
         @test_suite.should_receive(:finish)
-        @cucumber.before_feature_element(@feature_element)
-        @cucumber.after_feature_element(@feature_element)
+        @cucumber.before_feature_name(@feature_name)
+        @cucumber.after_feature_name(@feature_name)
       end
 
       it "should ask the report manager to write a report" do
         @report_manager.should_receive(:write_report).with(@test_suite)
-        @cucumber.before_feature_element(@feature_element)
-        @cucumber.after_feature_element(@feature_element)
+        @cucumber.before_feature_name(@feature_name)
+        @cucumber.after_feature_name(@feature_name)
       end
     end
 
-    describe "when visiting a step inside a scenario" do
+    describe "when visiting a scenario" do
       before(:each) do
         @testcases = []
 
         @test_suite = mock("test_suite", :testcases => @testcases, :start => nil, :finish => nil)        
 
         @cucumber = new_instance
-        @cucumber.stub!(:test_suite).and_return(@test_suite)
+        @cucumber.instance_variable_set("@test_suite", @test_suite)
+        
+        @feature_element_name = "Feature Element Name"
+        @feature_element = mock(@feature_element_name, :accept => true)
 
-        @test_case = mock("test_case", :start => nil, :finish => nil, :name => "Step Name")
+        @test_case = mock("test_case", :start => nil, :finish => nil, :name => @feature_element_name, :name= => nil)
         CI::Reporter::TestCase.stub!(:new).and_return(@test_case)
 
-        @step = mock("step", :accept => true, :status => :passed)
-        @step.stub!(:name).and_return("Step Name")
+        @step = mock("step", :accept => true, :status => :passed)        
       end
 
       it "should create a new test case" do
-        CI::Reporter::TestCase.should_receive(:new).with("Step Name")
-        @cucumber.before_step(@step)
+        CI::Reporter::TestCase.should_receive(:new).with(@feature_element_name)
+        @cucumber.before_feature_element(@feature_element)
       end
 
       it "should indicate that the test case has started" do
         @test_case.should_receive(:start)
-        @cucumber.before_step(@step)
+        @cucumber.before_feature_element(@feature_element)
       end
 
       it "should indicate that the test case has finished" do
         @test_case.should_receive(:finish)
-        @cucumber.after_step(@step)
+        @cucumber.before_feature_element(@feature_element)
+        @cucumber.after_feature_element(@feature_element)
       end
 
       it "should add the test case to the suite's list of cases" do
         CI::Reporter::TestSuite.stub!(:new).and_return(@test_suite)
         @testcases.should be_empty
-        @cucumber.after_step(@step)
+        @cucumber.before_feature_element(@feature_element)
+        @cucumber.after_feature_element(@feature_element)
         @testcases.should_not be_empty
         @testcases.first.should == @test_case
       end
 
       it "should alter the name of a test case that is pending to include '(PENDING)'" do
         @step.stub!(:status).and_return(:pending)
-        @test_case.should_receive(:name=).with("Step Name (PENDING)")
+        @test_case.should_receive(:name=).with("#{@feature_element_name} (PENDING)")
+        @cucumber.before_feature_element(@feature_element)
         @cucumber.after_step(@step)
+        @cucumber.after_feature_element(@feature_element)
       end
 
       it "should alter the name of a test case that is undefined to include '(PENDING)'" do
         @step.stub!(:status).and_return(:undefined)
-        @test_case.should_receive(:name=).with("Step Name (PENDING)")
+        @test_case.should_receive(:name=).with("#{@feature_element_name} (PENDING)")
+        @cucumber.before_feature_element(@feature_element)
         @cucumber.after_step(@step)
+        @cucumber.after_feature_element(@feature_element)
       end
 
       it "should alter the name of a test case that was skipped to include '(SKIPPED)'" do
         @step.stub!(:status).and_return(:skipped)
-        @test_case.should_receive(:name=).with("Step Name (SKIPPED)")
+        @test_case.should_receive(:name=).with("#{@feature_element_name} (SKIPPED)")
+        @cucumber.before_feature_element(@feature_element)
         @cucumber.after_step(@step)
+        @cucumber.after_feature_element(@feature_element)
       end
+    end
 
+    describe "when visiting a step" do
+      before(:each) do
+        @testcases = []
+        @test_suite = mock("test_suite", :testcases => @testcases, :start => nil, :finish => nil)
+        @test_case = mock("test_case", :failures => [], :start => nil, :finish => nil, :name => "Step Name", :name= => nil)
+        
+        @cucumber = new_instance
+        @cucumber.instance_variable_set("@test_suite", @test_suite)
+        @cucumber.instance_variable_set("@test_case", @test_case)
+        @cucumber.instance_variable_set("@status", "")
+        
+        @step = mock("step", :accept => true, :status => :passed)
+        @step.stub!(:name).and_return("Step Name")
+      end
+      
+      it "should alter the status of a test case that is pending to '(PENDING)'" do
+        @step.stub!(:status).and_return(:pending)      
+        @cucumber.after_step(@step)
+        @cucumber.instance_variable_get("@status").should == "(PENDING)"
+      end
+      
+      it "should alter the status of a test case that is skipped to '(SKIPPED)'" do
+        @step.stub!(:status).and_return(:skipped)
+        @cucumber.after_step(@step)
+        @cucumber.instance_variable_get("@status").should == "(SKIPPED)"
+      end
+      
+      it "should alter the status of a test case that has failed to '(FAILED)'" do
+        @step.stub!(:status).and_return(:failed)
+        @cucumber.after_step(@step)
+        @cucumber.instance_variable_get("@status").should == "(FAILED)"
+      end
+      
+      it "should not alter the status of a test case that is skipped if it has failed, before" do
+        @step.stub!(:status).and_return(:failed)
+        @cucumber.after_step(@step)
+        prev_status = @cucumber.instance_variable_get("@status")
+        @step.stub!(:status).and_return(:skipped)
+        @cucumber.after_step(@step)
+        @cucumber.instance_variable_get("@status").should == prev_status
+      end
+      
+      it "should not alter the status of a test case that is pending if it has skipped, before" do
+        @step.stub!(:status).and_return(:skipped)
+        @cucumber.after_step(@step)
+        prev_status = @cucumber.instance_variable_get("@status")
+        @step.stub!(:status).and_return(:pending)
+        @cucumber.after_step(@step)
+        @cucumber.instance_variable_get("@status").should == prev_status
+      end
+      
+      it "should not alter the status of a test case that is pending if it has failed, before" do
+        @step.stub!(:status).and_return(:failed)
+        @cucumber.after_step(@step)
+        prev_status = @cucumber.instance_variable_get("@status")
+        @step.stub!(:status).and_return(:pending)
+        @cucumber.after_step(@step)
+        @cucumber.instance_variable_get("@status").should == prev_status
+      end
+      
+      it "should alter the status of a test case that is pending and has skipped, afterwards" do
+        @step.stub!(:status).and_return(:pending)
+        @cucumber.after_step(@step)
+        prev_status = @cucumber.instance_variable_get("@status")
+        @step.stub!(:status).and_return(:skipped)
+        @cucumber.after_step(@step)
+        @cucumber.instance_variable_get("@status").should_not == prev_status
+      end
+      
+      it "should alter the status of a test case that is skipped and has failed, afterwards" do
+        @step.stub!(:status).and_return(:skipped)
+        @cucumber.after_step(@step)
+        prev_status = @cucumber.instance_variable_get("@status")
+        @step.stub!(:status).and_return(:failed)
+        @cucumber.after_step(@step)
+        @cucumber.instance_variable_get("@status").should_not == prev_status
+      end
+      
       describe "that fails" do
         before(:each) do
           @step.stub!(:status).and_return(:failed)
 
           @failures = []
           @test_case.stub!(:failures).and_return(@failures)
+          
+          @cucumber_failure.instance_variable_set("@test_case", @test_case)
 
           @cucumber_failure = mock("cucumber_failure")
           CI::Reporter::CucumberFailure.stub!(:new).and_return(@cucumber_failure)
